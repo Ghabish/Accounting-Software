@@ -167,3 +167,37 @@ def journal_listing(db: DB, actor: CurrentActor, company_id: CompanyId, date_fro
             {"key": "total", "label": "Amount", "type": "money"}]
     return respond({"title": "Journal Listing", "company": "", "subtitle": f"{date_from} to {date_to}",
                     "columns": cols, "rows": rows_out, "meta": {}}, format)
+
+
+@router.get("/subledger-reconciliation")
+def subledger_reconciliation(db: DB, actor: CurrentActor, company_id: CompanyId, as_of: date, format: str = "json"):
+    """AP, AR, bank, fixed assets and tax sub-ledgers against the GL in one view."""
+    actor.require("report.view")
+    from backend.ap import service as ap
+    from backend.ar import service as ar
+    from backend.assets import service as fa
+    from backend.banking import reconciliation as bank
+    from backend.tax import service as tax
+    fy = fin.fiscal_year_for(db, company_id, as_of)
+    parts = {"AP": ap.reconciliation(db, company_id, as_of), "AR": ar.reconciliation(db, company_id, as_of),
+             "FIXED_ASSETS": fa.reconciliation(db, company_id, as_of),
+             "TAX": tax.account_reconciliation(db, company_id, fy.start_date, as_of)}
+    banks = bank.status_for_period(db, company_id, as_of)
+    rows_out = []
+    for key, rep in parts.items():
+        rows_out.append({"label": rep["title"], "status": "RECONCILED" if rep["meta"]["reconciled"] else "DIFFERENCE",
+                         "level": 0, "style": "subtotal", "area": key})
+        for r in rep["rows"]:
+            if r.get("c2") is not None or r.get("c5") is not None:
+                rows_out.append({**r, "level": 1})
+    for b in banks:
+        rows_out.append({"label": f"Bank reconciliation - {b['code']} {b['name']}",
+                         "status": "RECONCILED" if b["ok"] else "NOT RECONCILED", "level": 0, "style": "line",
+                         "last_reconciled": b["last_reconciled"], "area": "BANK"})
+    rep = {"title": "Sub-ledger to GL Reconciliation Summary", "subtitle": f"As at {as_of}",
+           "columns": [{"key": "label", "label": "Area", "type": "text"}, {"key": "status", "label": "Status", "type": "text"},
+                       {"key": "c0", "label": "Sub-ledger", "type": "money"}, {"key": "c1", "label": "GL", "type": "money"},
+                       {"key": "c2", "label": "Difference", "type": "money"}],
+           "rows": rows_out,
+           "meta": {k: v["meta"]["reconciled"] for k, v in parts.items()} | {"BANK": all(b["ok"] for b in banks), "banks": banks}}
+    return respond(rep, format)

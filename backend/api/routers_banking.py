@@ -248,3 +248,151 @@ def act_transfer(tid: int, action: str, body: ActIn, db: DB, actor: CurrentActor
 def cash_position(db: DB, actor: CurrentActor, company_id: CompanyId, on_date: date, format: str = "json"):
     actor.require("bank.view")
     return respond(svc.daily_cash_position(db, company_id, actor, on_date), format)
+
+
+# ------------------------------------------------------------------ bank reconciliation
+from fastapi import File, Form, UploadFile  # noqa: E402
+
+from backend.api.serialize import jsonable  # noqa: E402
+from backend.banking import reconciliation as rec  # noqa: E402
+from backend.banking.models import BankReconciliation, BankStatement  # noqa: E402
+
+
+class StatementLineIn(BaseModel):
+    txn_date: date
+    value_date: date | None = None
+    description: str | None = None
+    reference: str | None = None
+    debit: Decimal = Field(default=Decimal("0"), ge=0)
+    credit: Decimal = Field(default=Decimal("0"), ge=0)
+    balance: Decimal | None = None
+
+
+class StatementIn(BaseModel):
+    bank_account_id: int
+    opening_balance: Decimal
+    closing_balance: Decimal | None = None
+    lines: list[StatementLineIn] = Field(min_length=1)
+
+
+@router.post("/statements", status_code=201)
+def statement_create(body: StatementIn, db: DB, actor: CurrentActor):
+    st = rec.import_statement(db, actor, body.bank_account_id, [l.model_dump() for l in body.lines],
+                              opening_balance=body.opening_balance, closing_balance=body.closing_balance)
+    db.commit()
+    return row(st, extra={"lines": rows(st.lines)})
+
+
+@router.post("/statements/import", status_code=201)
+async def statement_import(db: DB, actor: CurrentActor, bank_account_id: int = Form(...), opening_balance: Decimal = Form(...),
+                           closing_balance: Decimal | None = Form(None), column_map: str | None = Form(None),
+                           file: UploadFile = File(...)):
+    import json
+    content = await file.read()
+    lines = rec.parse_statement_file(content, file.filename or "statement.csv", json.loads(column_map) if column_map else None)
+    st = rec.import_statement(db, actor, bank_account_id, lines, opening_balance=opening_balance,
+                              closing_balance=closing_balance, filename=file.filename)
+    db.commit()
+    return row(st, extra={"lines": rows(st.lines)})
+
+
+@router.get("/statements")
+def statements(db: DB, actor: CurrentActor, bank_account_id: int):
+    actor.require("bank.view")
+    return rows(db.scalars(select(BankStatement).where(BankStatement.bank_account_id == bank_account_id)
+                           .order_by(BankStatement.date_to.desc())).all())
+
+
+@router.get("/statements/{statement_id}")
+def statement_get(statement_id: int, db: DB, actor: CurrentActor):
+    actor.require("bank.view")
+    st = db.get(BankStatement, statement_id)
+    if st is None:
+        raise NotFound("Statement not found")
+    from backend.banking.models import BankMatch
+    out = []
+    for sl in st.lines:
+        ms = db.scalars(select(BankMatch).where(BankMatch.statement_line_id == sl.id, BankMatch.is_active.is_(True))).all()
+        out.append(row(sl, extra={"matches": rows(ms)}))
+    return row(st, extra={"lines": out})
+
+
+@router.get("/accounts/{bank_account_id}/unreconciled")
+def unreconciled(bank_account_id: int, db: DB, actor: CurrentActor, as_of: date | None = None):
+    actor.require("bank.view")
+    ba = db.get(BankAccount, bank_account_id)
+    if ba is None:
+        raise NotFound("Bank account not found")
+    return jsonable(rec.unreconciled_gl(db, ba, as_of))
+
+
+@router.post("/statements/{statement_id}/auto-match")
+def auto_match(statement_id: int, db: DB, actor: CurrentActor, date_window: int = 5):
+    n = rec.auto_match(db, actor, statement_id, date_window)
+    db.commit()
+    return {"matched": n}
+
+
+class MatchPair(BaseModel):
+    statement_line_id: int
+    journal_line_id: int
+    amount: Decimal | None = Field(default=None, gt=0)
+
+
+@router.post("/matches")
+def match(body: list[MatchPair], db: DB, actor: CurrentActor):
+    ms = rec.match(db, actor, [p.model_dump() for p in body])
+    db.commit()
+    return rows(ms)
+
+
+@router.delete("/matches/{match_id}")
+def unmatch(match_id: int, db: DB, actor: CurrentActor):
+    rec.unmatch(db, actor, match_id)
+    db.commit()
+    return {"ok": True}
+
+
+class AdjustIn(BaseModel):
+    statement_line_id: int
+    account_id: int
+    cost_centre_id: int | None = None
+    site_id: int | None = None
+    description: str | None = None
+
+
+@router.post("/adjustments", status_code=201)
+def adjustment(body: AdjustIn, db: DB, actor: CurrentActor):
+    je = rec.create_adjustment(db, actor, body.statement_line_id, body.account_id, cost_centre_id=body.cost_centre_id,
+                               site_id=body.site_id, description=body.description)
+    db.commit()
+    return {"journal_id": je.id, "number": je.number}
+
+
+@router.get("/reconciliation")
+def reconciliation(db: DB, actor: CurrentActor, bank_account_id: int, as_of: date, statement_id: int | None = None):
+    actor.require("bank.view")
+    return jsonable(rec.reconciliation_report(db, bank_account_id, as_of, statement_id))
+
+
+class CompleteIn(BaseModel):
+    bank_account_id: int
+    as_of: date
+    statement_id: int | None = None
+    notes: str | None = None
+
+
+@router.post("/reconciliation/complete", status_code=201)
+def reconciliation_complete(body: CompleteIn, db: DB, actor: CurrentActor):
+    r = rec.complete(db, actor, body.bank_account_id, body.as_of, body.statement_id, body.notes)
+    db.commit()
+    return row(r)
+
+
+@router.get("/reconciliations")
+def reconciliation_history(db: DB, actor: CurrentActor, bank_account_id: int | None = None):
+    actor.require("bank.view")
+    stmt = select(BankReconciliation).order_by(BankReconciliation.as_of_date.desc(), BankReconciliation.id.desc())
+    if bank_account_id:
+        stmt = stmt.where(BankReconciliation.bank_account_id == bank_account_id)
+    return rows(db.scalars(stmt).all())
