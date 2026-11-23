@@ -64,7 +64,7 @@ ROLES: dict[str, tuple[str, set[str], bool]] = {
     # code: (name, permissions, all_sites default)
     "CFO": ("Chief Financial Officer", ALL - {"admin.users"}, True),
     "FINANCE_MANAGER": ("Finance Manager", FINANCE_MANAGER, True),
-    "ACCOUNTANT": ("Accountant", _all_view() - {"audit.view"} | _doc("journal", "create", "check") | {
+    "ACCOUNTANT": ("Accountant", _all_view() - {"audit.view"} | _doc("journal", "create", "check", "reverse") | {
         "asset.manage", "asset.depreciate", "report.view", "report.export", "budget.manage", "bank.reconcile",
         "cinema.day_close", "cinema.settle", "import.run"}, True),
     "AP_OFFICER": ("AP Officer", {"supplier.view", "supplier.manage", "tax.view", "coa.view", "masters.view",
