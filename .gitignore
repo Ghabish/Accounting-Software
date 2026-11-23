@@ -6,3 +6,7 @@ node_modules/
 .pytest_cache/
 *.db
 reports/output/
+release/
+.venv/
+*.db
+.demo_loaded

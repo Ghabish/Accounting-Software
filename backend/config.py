@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     duplicate_invoice_warning_days: int = 30
     sql_echo: bool = False
     enable_api_docs: bool = True
+    admin_password: str | None = None  # initial administrator password used by scripts.seed
     login_ip_max_failures: int = 20
     login_ip_window_minutes: int = 15
 

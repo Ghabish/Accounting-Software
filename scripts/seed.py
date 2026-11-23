@@ -28,7 +28,8 @@ def main() -> None:
         with eng.begin() as c:
             install_triggers(c)
     with SessionLocal() as db:
-        result = seed_all(db, demo=args.demo, admin_password=os.environ.get("UCF_ADMIN_PASSWORD"))
+        from backend.config import get_settings
+        result = seed_all(db, demo=args.demo, admin_password=get_settings().admin_password or os.environ.get("UCF_ADMIN_PASSWORD"))
         db.commit()
     print(f"Seeded company {result['company_id']}; {result['accounts_created']} accounts created.")
     if result["admin_password"]:
