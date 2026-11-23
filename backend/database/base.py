@@ -53,7 +53,7 @@ class TimestampMixin:
 
 
 class AuditColumnsMixin(TimestampMixin):
-    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT", use_alter=True), nullable=True)
 
 
 class StrEnum(str, enum.Enum):

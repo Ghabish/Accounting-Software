@@ -1,0 +1,13 @@
+# Universal Cinemas Finance - Python dependencies (pinned, tested on Python 3.11-3.13)
+fastapi==0.165.0
+starlette==1.7.0
+uvicorn[standard]==0.54.0
+SQLAlchemy==2.0.58
+alembic==1.20.1
+psycopg[binary]==3.3.9
+pydantic==2.13.5
+pydantic-settings==2.16.3
+python-multipart==0.0.32
+PyJWT==2.15.0
+openpyxl==3.1.5
+reportlab==5.0.1

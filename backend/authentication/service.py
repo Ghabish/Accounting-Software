@@ -17,11 +17,35 @@ from backend.core.exceptions import AuthenticationFailed, Conflict, NotFound, Va
 from backend.database.base import utcnow
 
 
-def login(db: Session, username: str, password: str) -> dict:
+_ip_failures: dict[str, list] = {}
+
+
+def _ip_blocked(ip: str | None) -> bool:
+    """Per-IP throttle against password spraying (single process; add proxy rate limiting for multi-worker)."""
+    if not ip:
+        return False
     s = get_settings()
+    cutoff = utcnow() - timedelta(minutes=s.login_ip_window_minutes)
+    hits = [t for t in _ip_failures.get(ip, []) if t > cutoff]
+    _ip_failures[ip] = hits
+    return len(hits) >= s.login_ip_max_failures
+
+
+def _ip_fail(ip: str | None) -> None:
+    if ip:
+        _ip_failures.setdefault(ip, []).append(utcnow())
+
+
+def login(db: Session, username: str, password: str) -> dict:
+    from backend.audit.service import request_context
+    s = get_settings()
+    ip = request_context.get().get("ip")
+    if _ip_blocked(ip):
+        raise AuthenticationFailed("Too many failed sign-in attempts from this address; try again later", code="ip_throttled")
     user = db.scalar(select(User).where(func.lower(User.username) == username.strip().lower()))
     now = utcnow()
     if user is None:
+        _ip_fail(ip)
         record(db, None, "auth.login_failed", "user", None, notes=f"unknown user {username[:60]}")
         db.commit()
         raise AuthenticationFailed("Invalid username or password")
@@ -29,6 +53,7 @@ def login(db: Session, username: str, password: str) -> dict:
         raise AuthenticationFailed("Account temporarily locked after repeated failed sign-ins; try again later",
                                    code="account_locked")
     if not user.is_active or not verify_password(password, user.password_hash):
+        _ip_fail(ip)
         user.failed_logins = (user.failed_logins or 0) + 1
         if user.failed_logins >= s.max_failed_logins:
             user.locked_until = now + timedelta(minutes=s.lockout_minutes)

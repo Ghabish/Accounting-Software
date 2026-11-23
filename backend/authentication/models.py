@@ -54,7 +54,7 @@ class User(TimestampMixin, Base):
     token_version: Mapped[int] = mapped_column(Integer, default=1)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    default_company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"), nullable=True)
+    default_company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", use_alter=True), nullable=True)
     roles: Mapped[list[Role]] = relationship(secondary=user_roles, lazy="selectin")
     site_access: Mapped[list["UserSiteAccess"]] = relationship(lazy="selectin", cascade="all, delete-orphan")
 

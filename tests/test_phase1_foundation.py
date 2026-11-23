@@ -55,6 +55,7 @@ def test_create_account_next_free_code_and_unique_name(client, H):
     assert r.status_code == 201, r.text
     a = r.json()
     assert a["code"] == "06-06-06-0005" and a["cost_centre_rule"] == "REQ" and a["normal_balance"] == "D"
+    assert a["pl_section"] == "OPEX" and a["cash_flow_line"] == "PBT" and a["site_rule"] == "REQ"  # inherited from the sub-group
     r = client.post("/api/accounts", headers=H["cfo"], json={"parent_code": "06-06-06", "name": "cinema HALL decoration"})
     assert r.status_code == 409
 

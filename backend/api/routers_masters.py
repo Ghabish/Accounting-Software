@@ -284,6 +284,24 @@ def account_create(body: AccountIn, db: DB, actor: CurrentActor):
     if body.is_contra:
         normal = "C" if normal == "D" else "D"
     data = body.model_dump(exclude={"parent_code", "code"})
+    given = body.model_dump(exclude_unset=True)
+    # Reporting and control attributes not supplied are inherited from a sibling ledger in the same
+    # sub-group (so a new expense ledger lands in the right P&L / cash-flow line), else derived from the code.
+    sibling = db.scalar(select(Account).where(Account.parent_id == parent.id, Account.is_postable.is_(True),
+                                              Account.is_contra.is_(body.is_contra)).order_by(Account.code)) if level == 4 else None
+    inherit = ("pl_section", "revenue_stream", "cash_flow_line", "cf_adjustment", "cf_counter_line", "site_rule",
+               "cost_centre_rule", "party_type", "party_rule", "control_type", "manual_journal", "abnormal_balance",
+               "budget_control", "reconcile_required", "is_intercompany")
+    for f in inherit:
+        if f not in given and sibling is not None:
+            data[f] = getattr(sibling, f)
+    if sibling is None and level == 4:
+        pl_map = [("04", "REVENUE"), ("05", "COST_OF_SALES"), ("06-07", "DEPRECIATION"), ("06", "OPEX"), ("07-01", "OTHER_INCOME"),
+                  ("07-02", "OTHER_EXPENSE"), ("08-01", "FINANCE_COST"), ("08-02", "TAXATION")]
+        if "pl_section" not in given:
+            data["pl_section"] = next((sec for pre, sec in pl_map if code.startswith(pre)), None)
+        if "cash_flow_line" not in given and data.get("pl_section"):
+            data["cash_flow_line"] = "OP_TAX_PAID" if data["pl_section"] == "TAXATION" else "PBT"
     if data.get("cost_centre_rule") is None:
         data["cost_centre_rule"] = CostCentreRule.REQ if atype in (AccountType.INCOME, AccountType.EXPENSE) else CostCentreRule.BS
     a = Account(code=code, level=level, parent_id=parent.id, account_type=atype, normal_balance=normal,

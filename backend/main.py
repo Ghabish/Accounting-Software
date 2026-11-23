@@ -44,9 +44,11 @@ API_ROUTERS = [
 
 def create_app() -> FastAPI:
     s = get_settings()
+    docs = s.enable_api_docs
     app = FastAPI(title=s.app_name, version="1.0.0",
                   description="Accounting & finance system for Universal Cinemas / NC Entertainment",
-                  docs_url="/api/docs", redoc_url="/api/redoc", openapi_url="/api/openapi.json")
+                  docs_url="/api/docs" if docs else None, redoc_url="/api/redoc" if docs else None,
+                  openapi_url="/api/openapi.json" if docs else None)
 
     if s.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in s.cors_origins.split(",")],
@@ -64,8 +66,16 @@ def create_app() -> FastAPI:
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        if s.environment == "production":
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         if request.url.path.startswith("/api/"):
             response.headers.setdefault("Cache-Control", "no-store")
+        elif not request.url.path.startswith(("/api/docs", "/api/redoc")):
+            response.headers.setdefault("Content-Security-Policy",
+                                        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                                        "img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; "
+                                        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
         return response
 
     @app.exception_handler(DomainError)

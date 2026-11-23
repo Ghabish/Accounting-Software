@@ -40,10 +40,11 @@ def engine():
     if eng.dialect.name == "postgresql":
         with eng.begin() as c:
             c.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
-        from migrations.triggers import install_triggers
-        Base.metadata.create_all(eng)
-        with eng.begin() as c:
-            install_triggers(c)
+        from alembic import command
+        from alembic.config import Config
+        cfg = Config(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
+        cfg.set_main_option("sqlalchemy.url", TEST_URL.replace("%", "%%"))
+        command.upgrade(cfg, "head")  # the real migrations, including the integrity triggers
     else:
         Base.metadata.create_all(eng)
     set_engine(eng)
