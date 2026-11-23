@@ -132,7 +132,14 @@ class BoxOfficeSale(AuditColumnsMixin, Base):
     refund_amount: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0"))
     import_batch_id: Mapped[int | None] = fk("sales_import_batches.id")
     day_close_id: Mapped[int | None] = fk("day_closes.id")
-    source_ref: Mapped[str | None] = mapped_column(String(80))
+    source_ref: Mapped[str | None] = mapped_column(String(80), index=True)
+    # filled at day close (ex-tax values used by management reports and distributor settlements)
+    net_revenue: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0"))
+    tax_amount: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0"))
+    film_rental_amount: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0"))
+    is_deferred: Mapped[bool] = mapped_column(Boolean, default=False)       # sold for a future show date
+    released_day_close_id: Mapped[int | None] = fk("day_closes.id")           # day close that recognised it
+    distributor_settlement_id: Mapped[int | None] = fk("distributor_settlements.id")
 
     @property
     def net_collected(self) -> Decimal:
@@ -155,7 +162,9 @@ class FnBSale(AuditColumnsMixin, Base):
     refund_amount: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0"))
     import_batch_id: Mapped[int | None] = fk("sales_import_batches.id")
     day_close_id: Mapped[int | None] = fk("day_closes.id")
-    source_ref: Mapped[str | None] = mapped_column(String(80))
+    source_ref: Mapped[str | None] = mapped_column(String(80), index=True)
+    net_revenue: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0"))
+    tax_amount: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0"))
 
     @property
     def net_collected(self) -> Decimal:
@@ -179,7 +188,10 @@ class DayClose(AuditColumnsMixin, Base):
     cash_expected: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0"))
     cash_declared: Mapped[Decimal | None] = mapped_column(MONEY)
     cash_over_short: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0"))
+    deferred_amount: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0"))
+    released_amount: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0"))
     journal_id: Mapped[int | None] = fk("journal_entries.id")
+    film_rental_journal_id: Mapped[int | None] = fk("journal_entries.id")
     notes: Mapped[str | None] = mapped_column(Text)
 
 
@@ -233,6 +245,7 @@ class CollectionAllocation(Base):
 class DistributorSettlement(AuditColumnsMixin, Base):
     __tablename__ = "distributor_settlements"
     id: Mapped[int] = mapped_column(primary_key=True)
+    reference: Mapped[str | None] = mapped_column(String(60))
     company_id: Mapped[int] = fk("companies.id", nullable=False)
     distributor_id: Mapped[int] = fk("suppliers.id", nullable=False)
     period_from: Mapped[date] = mapped_column(Date)

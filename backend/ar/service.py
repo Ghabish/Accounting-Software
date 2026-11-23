@@ -150,7 +150,8 @@ def _post_document(db: Session, doc: ARDocument, actor: Actor) -> None:
     je = engine.create_and_post(db, actor, company_id=doc.company_id, journal_type=jt, transaction_date=doc.invoice_date,
                                 posting_date=doc.posting_date, description=f"{doc.number} {doc.description}",
                                 lines=_journal_lines(db, doc, cus, validate=False, actor=actor), reference=doc.number,
-                                source_module=SourceModule.AR, source_type="ar_document", source_id=doc.id,
+                                source_module=SourceModule.OPENING if doc.is_opening else SourceModule.AR,
+                                source_type="ar_document", source_id=doc.id,
                                 source_key=f"AR-DOC-{doc.id}")
     sign = -1 if doc.doc_type == ARDocType.CREDIT_NOTE else 1
     for l in doc.lines:

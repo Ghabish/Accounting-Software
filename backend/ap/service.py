@@ -206,7 +206,8 @@ def _post_document(db: Session, doc: APDocument, actor: Actor) -> None:
     jt = JournalType.API if doc.doc_type == APDocType.INVOICE else JournalType.APC
     je = engine.create_and_post(db, actor, company_id=doc.company_id, journal_type=jt, transaction_date=doc.invoice_date,
                                 posting_date=doc.posting_date, description=f"{doc.number} {doc.description}",
-                                lines=lines, reference=doc.supplier_invoice_no, source_module=SourceModule.AP,
+                                lines=lines, reference=doc.supplier_invoice_no,
+                                source_module=SourceModule.OPENING if doc.is_opening else SourceModule.AP,
                                 source_type="ap_document", source_id=doc.id, source_key=f"AP-DOC-{doc.id}")
     sign = 1 if doc.doc_type == APDocType.INVOICE else -1
     for l in doc.lines:
