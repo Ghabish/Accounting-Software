@@ -20,7 +20,7 @@ from backend.authentication.models import User
 from backend.core.exceptions import NotFound
 from backend.core.pagination import paginate
 from backend.masters.models import CostCentre, DimensionValue, Employee, Site
-from backend.workflow.engine import history
+from backend.workflow.engine import history, history_rows  # noqa: F401
 
 router = APIRouter(prefix="/api/journals", tags=["journals"])
 
@@ -90,7 +90,7 @@ def journal_detail(db, je: JournalEntry) -> dict:
                                                      JournalEntry.status != DocStatus.CANCELLED))
     return row(je, extra={"lines": lines, "users": {str(k): v for k, v in users.items()},
                           "reversed_by_journal": {"id": reversal.id, "number": reversal.number, "status": reversal.status.value} if reversal else None,
-                          "history": rows(history(db, "JOURNAL", je.id))})
+                          "history": history_rows(db, "JOURNAL", je.id)})
 
 
 @router.get("")

@@ -10,14 +10,14 @@ from sqlalchemy import or_, select
 
 from backend.api.crud import register_crud
 from backend.api.deps import DB, CompanyId, CurrentActor
-from backend.api.serialize import jsonable, page, row, rows
+from backend.api.serialize import line_rows, jsonable, page, row, rows
 from backend.ar import service as svc
 from backend.ar.models import ARAllocation, ARDocType, ARDocument, ARReceipt, Customer, CustomerCategory
 from backend.core.exceptions import NotFound
 from backend.core.pagination import paginate
 from backend.reporting.exports import respond
 from backend.workflow import engine as wf
-from backend.workflow.engine import history
+from backend.workflow.engine import history, history_rows  # noqa: F401
 
 router = APIRouter(prefix="/api/ar", tags=["accounts receivable"])
 
@@ -110,8 +110,8 @@ def _doc_out(db, d: ARDocument) -> dict:
     cus = db.get(Customer, d.customer_id)
     allocs = db.scalars(select(ARAllocation).where(or_(ARAllocation.invoice_id == d.id, ARAllocation.credit_document_id == d.id))).all()
     return row(d, extra={"customer": {"id": cus.id, "code": cus.code, "name": cus.name}, "outstanding": d.outstanding,
-                         "lines": [row(l) for l in d.lines], "allocations": rows(allocs),
-                         "history": rows(history(db, "AR_INVOICE", d.id))})
+                         "lines": line_rows(db, d.lines), "allocations": rows(allocs),
+                         "history": history_rows(db, "AR_INVOICE", d.id)})
 
 
 def _payload(body: DocIn) -> dict:
@@ -233,7 +233,7 @@ def _rec_out(db, r: ARReceipt) -> dict:
     cus = db.get(Customer, r.customer_id)
     return row(r, extra={"customer": {"id": cus.id, "code": cus.code, "name": cus.name},
                          "lines": [row(l, extra={"invoice_number": db.get(ARDocument, l.document_id).number}) for l in r.lines],
-                         "history": rows(history(db, "AR_RECEIPT", r.id))})
+                         "history": history_rows(db, "AR_RECEIPT", r.id)})
 
 
 @router.get("/receipts")

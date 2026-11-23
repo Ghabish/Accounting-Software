@@ -171,3 +171,13 @@ def history(db: Session, doc_type: str, doc_id: int) -> list[WorkflowHistory]:
     return list(db.scalars(select(WorkflowHistory).where(WorkflowHistory.doc_type == doc_type,
                                                          WorkflowHistory.doc_id == doc_id)
                            .order_by(WorkflowHistory.id)).all())
+
+
+def history_rows(db: Session, doc_type: str, doc_id: int) -> list[dict]:
+    from backend.api.serialize import row
+    from backend.authentication.models import User
+    out = []
+    for h in history(db, doc_type, doc_id):
+        u = db.get(User, h.user_id) if h.user_id else None
+        out.append(row(h, extra={"username": u.username if u else None, "user_name": u.full_name if u else None}))
+    return out

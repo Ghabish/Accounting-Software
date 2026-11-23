@@ -294,3 +294,11 @@ def delete_attachment(att_id: int, db: DB, actor: CurrentActor):
     db.delete(att)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/workflow-config")
+def workflow_config(db: DB, actor: CurrentActor):
+    """Check-stage and auto-post settings per document type (read by the UI for every signed-in user)."""
+    return {w.doc_type: {"require_check": w.require_check, "auto_post_on_approval": w.auto_post_on_approval,
+                         "require_attachment": w.require_attachment}
+            for w in db.scalars(select(WorkflowDefinition)).all()}

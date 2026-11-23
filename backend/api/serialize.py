@@ -39,3 +39,17 @@ def rows(objs: Iterable[Any], **kw) -> list[dict]:
 
 def page(items: list, total: int, page_no: int, page_size: int) -> dict:
     return {"items": items, "total": total, "page": page_no, "page_size": page_size}
+
+
+def line_rows(db, lines) -> list[dict]:
+    """Document lines with account code / name, site and cost-centre codes for display."""
+    from backend.accounting.models import Account
+    from backend.masters.models import CostCentre, Site
+    out = []
+    for l in lines:
+        acc = db.get(Account, l.account_id) if getattr(l, "account_id", None) else None
+        site = db.get(Site, l.site_id) if getattr(l, "site_id", None) else None
+        cc = db.get(CostCentre, l.cost_centre_id) if getattr(l, "cost_centre_id", None) else None
+        out.append(row(l, extra={"account_code": acc.code if acc else None, "account_name": acc.name if acc else None,
+                                 "site_code": site.code if site else None, "cost_centre_code": cc.code if cc else None}))
+    return out

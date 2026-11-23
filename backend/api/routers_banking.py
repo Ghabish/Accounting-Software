@@ -10,14 +10,14 @@ from sqlalchemy import or_, select
 
 from backend.api.crud import register_crud
 from backend.api.deps import DB, CompanyId, CurrentActor
-from backend.api.serialize import page, row, rows
+from backend.api.serialize import line_rows, page, row, rows
 from backend.banking import service as svc
 from backend.banking.models import BankAccount, BankAccountKind, BankTransfer, CashBankVoucher
 from backend.core.exceptions import NotFound
 from backend.core.pagination import paginate
 from backend.reporting.exports import respond
 from backend.workflow import engine as wf
-from backend.workflow.engine import history
+from backend.workflow.engine import history, history_rows  # noqa: F401
 
 router = APIRouter(prefix="/api/banking", tags=["cash and bank"])
 
@@ -94,7 +94,7 @@ class VoucherIn(BaseModel):
 
 
 def _v_out(db, v: CashBankVoucher) -> dict:
-    return row(v, extra={"lines": rows(v.lines), "history": rows(history(db, "CASH_VOUCHER", v.id))})
+    return row(v, extra={"lines": line_rows(db, v.lines), "history": history_rows(db, "CASH_VOUCHER", v.id)})
 
 
 def _visible_accounts(db, actor):
@@ -187,7 +187,7 @@ class TransferIn(BaseModel):
 
 
 def _t_out(db, t: BankTransfer) -> dict:
-    return row(t, extra={"history": rows(history(db, "BANK_TRANSFER", t.id))})
+    return row(t, extra={"history": history_rows(db, "BANK_TRANSFER", t.id)})
 
 
 @router.get("/transfers")

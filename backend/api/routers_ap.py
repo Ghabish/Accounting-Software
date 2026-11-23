@@ -13,11 +13,11 @@ from backend.ap import service as svc
 from backend.ap.models import APAllocation, APDocType, APDocument, APPayment, Supplier, SupplierCategory, SupplierType
 from backend.api.crud import register_crud
 from backend.api.deps import DB, CompanyId, CurrentActor
-from backend.api.serialize import page, row, rows
+from backend.api.serialize import line_rows, page, row, rows
 from backend.core.exceptions import NotFound
 from backend.core.pagination import paginate
 from backend.reporting.exports import respond
-from backend.workflow.engine import history
+from backend.workflow.engine import history, history_rows  # noqa: F401
 
 router = APIRouter(prefix="/api/ap", tags=["accounts payable"])
 
@@ -135,8 +135,8 @@ def _doc_out(db, d: APDocument) -> dict:
     sup = db.get(Supplier, d.supplier_id)
     allocs = db.scalars(select(APAllocation).where(or_(APAllocation.invoice_id == d.id, APAllocation.credit_document_id == d.id))).all()
     return row(d, extra={"supplier": {"id": sup.id, "code": sup.code, "name": sup.name}, "outstanding": d.outstanding,
-                         "lines": [row(l) for l in d.lines], "allocations": rows(allocs),
-                         "history": rows(history(db, "AP_INVOICE", d.id))})
+                         "lines": line_rows(db, d.lines), "allocations": rows(allocs),
+                         "history": history_rows(db, "AP_INVOICE", d.id)})
 
 
 def _site_ok(actor, site_id):
@@ -271,7 +271,7 @@ def _pay_out(db, p: APPayment) -> dict:
                                    "supplier_invoice_no": inv.supplier_invoice_no if inv else None}))
     return row(p, extra={"supplier": {"id": sup.id, "code": sup.code, "name": sup.name,
                                       "beneficiary_name": sup.beneficiary_name}, "lines": lines,
-                         "history": rows(history(db, "AP_PAYMENT", p.id))})
+                         "history": history_rows(db, "AP_PAYMENT", p.id)})
 
 
 @router.get("/payments")
